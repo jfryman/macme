@@ -14,8 +14,69 @@ class MacMe::MQTTChatApi
     self.poll
   end
 
+  def random_presence_response
+    [
+      "The following folks are at #{zone_name}",
+      "These peeps are around",
+      "These fine people are at #{zone_name}"
+    ].sample
+  end
+
+  def random_no_presence_response
+    [
+      "Nobody is at #{zone_name}. Be the first!",
+      "Looks like nobody is around"
+    ].sample
+  end
+
   def mqtt_chat_poll_topic
     @mqtt_chat_poll_topic ||= ENV['MQTT_CHAT_TOPIC'] || 'irc/#'
+  end
+
+  def device_stale_time
+    @device_stale_time ||= ENV['MQTT_DEVICE_STALE_TIMEOUT'].to_i || 300
+  end
+
+  def lookup_user_devices(uid)
+    result_attributes = ['macAddress']
+    uid_filter = Net::LDAP::Filter.eq('uid', uid)
+    ldap_client.search(:filter => uid_filter,
+                       :attributes => result_attributes)
+  end
+
+  def lookup_uid_from_irc_nickname(nickname)
+    result_attributes = ['uid']
+    irc_nickname_filter = Net::LDAP::Filter.eq('irc', nickname)
+    ldap_client.search(:filter => irc_nickname_filter,
+                       :attributes => result_attributes) do |result|
+      return result.uid.first
+    end
+  end
+
+  def add_device_to_user(uid, device)
+    true
+  end
+
+  def remove_device_from_user(uid, device)
+    true
+  end
+
+  def filter_old_devices(devices)
+    devices.filter do |device|
+      device[:last_seen_epoch] >= Time.now.to_i + device_stale_time
+    end
+  end
+
+  def extract_users(devices)
+    devices.collect { |device| device[:uid] }
+  end
+
+  def extract_mac_address_from_message(message)
+    message[/(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))/,1]
+  end
+
+  def extract_username_from_topic(topic)
+    topic[/nick\/(\w+)\/said/,1]
   end
 
   def is_macme_command?(message)
@@ -47,19 +108,37 @@ class MacMe::MQTTChatApi
   end
 
   def cmd_register_device(topic, message)
-    true
+    uid =
+      lookup_uid_from_irc_nickname(
+        extract_username_from_topic(topic))
+    mac_address = extract_mac_address_from_message message
+
+    add_device_to_user(uid, mac_address)
   end
 
   def cmd_deregister_device(topic, message)
-    true
+    uid =
+      lookup_uid_from_irc_nickname(
+        extract_username_from_topic(topic))
+    mac_address = extract_mac_address_from_message message
+
+    remove_device_from_user(uid, mac_address)
   end
 
   def cmd_get_user_devices(topic, message)
-    true
+    uid =
+      lookup_uid_from_irc_nickname(
+      extract_username_from_topic(topic))
+
+    respond_devices(
+      lookup_user_devices(uid))
   end
 
   def cmd_get_office_peeps
-    true
+    respond_users(
+      extract_users(
+        filter_old_devices(
+          mqtt_client.get(devices_topic))))
   end
 
   def cmd_help
@@ -69,6 +148,18 @@ class MacMe::MQTTChatApi
     !macme deregister <macAddress> - Deregister device from your user
     !macme list                    - View all devices registered to you
     }
+  end
+
+  def respond_users(users)
+    if users
+      puts "#{random_presence_response}: #{users.join(',')}"
+    else
+      puts random_no_presence_response
+    end
+  end
+
+  def respond_devices(devices)
+    puts "The following devices belong to you: #{devices.join(',')}" if devices
   end
 
   def poll
