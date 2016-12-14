@@ -1,3 +1,7 @@
 vendor/bundle
 .env
 .bundle
+
+.#*
+
+Gemfile.lock
