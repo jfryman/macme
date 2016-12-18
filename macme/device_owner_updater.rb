@@ -1,11 +1,9 @@
 #!/usr/bin/env ruby
 
-require 'rubygems'
-require 'json'
+require_relative 'lib/macme.rb'
 require_relative 'lib/ldap.rb'
 require_relative 'lib/mqtt.rb'
 require_relative 'lib/device.rb'
-require_relative 'lib/logger.rb'
 
 module MacMe
   class DeviceOwnerUpdater
@@ -14,7 +12,7 @@ module MacMe
     include MacMe::Device
 
     def initialize
-      MacMe::Logger.log.debug "Beginning DeviceUpdater Poll"
+      MacMe::Logger.log.debug "Beginning DeviceUpdater Worker"
       self.poll
     end
 

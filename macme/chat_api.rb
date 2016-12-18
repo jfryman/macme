@@ -1,9 +1,9 @@
 #!/usr/bin/env ruby
-require 'rubygems'
+
+require_relative 'lib/macme.rb'
 require_relative 'lib/mqtt.rb'
 require_relative 'lib/ldap.rb'
 require_relative 'lib/device.rb'
-require_relative 'lib/logger.rb'
 
 module MacMe
   class MQTTChatApi

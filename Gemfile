@@ -6,3 +6,6 @@ gem 'chainable_methods', '~> 0.2.1'
 gem 'foreman',           '~> 0.82.0'
 gem 'net-ldap',          '~> 0.15.0'
 gem 'mqtt',              '~> 0.4.0'
+
+gem 'dotenv-rails',      :groups => [:development, :test]
+gem 'pry',               :groups => [:development, :test]

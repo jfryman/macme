@@ -14,7 +14,7 @@ module MacMe
       [
         mqtt_topic,
         zone_name,
-        device[:mac]
+        device["mac"]
       ].join('/')
     end
 
@@ -27,16 +27,8 @@ module MacMe
     end
 
     def device_has_owner?(device={})
-      device[:uid] ? true : false
+      device["uid"] ? true : false
     end
 
-    def update_device_last_seen_timestamp(device)
-      updated_timestamps = {
-        :last_seen => Time.now,
-        :last_seen_epoch => Time.now.to_i
-      }
-
-      device.merge(updated_timestamps)
-    end
   end
 end

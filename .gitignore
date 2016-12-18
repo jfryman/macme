@@ -1,6 +1,7 @@
 vendor/bundle
 .env
 .bundle
+bin/*
 
 .#*
 
