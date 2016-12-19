@@ -21,5 +21,9 @@ module MacMe
 
       @ldap_client ||= Net::LDAP.new(ldap_args)
     end
+
+    def user_dn(uid)
+      "uid=#{uid},ou=People,#{ENV['LDAP_BASE_DN']}"
+    end
   end
 end

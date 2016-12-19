@@ -25,10 +25,5 @@ module MacMe
         '#'
       ].join('/')
     end
-
-    def device_has_owner?(device={})
-      device["uid"] ? true : false
-    end
-
   end
 end

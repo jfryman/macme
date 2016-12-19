@@ -52,17 +52,14 @@ module MacMe
       result.first.objectclass
     end
 
-    def uid_has_device_schema?(uid)
-      get_uid_objectclass(uid).include? 'ieee802Device'
+    def get_uid_from_irc_nickname(nickname)
+      result_attributes = ['dn']
+      irc_nickname_filter = Net::LDAP::Filter.eq('displayName', nickname)
+      result = ldap_client.search(:filter => irc_nickname_filter,
+                                  :attributes => result_attributes)
+
+      extract_uid_from_dn result.first.dn
     end
-
-    def add_device_schema(uid)
-      updated_objectclass = get_uid_objectclass(uid) + ['ieee802Device']
-      user_dn = ""
-
-      ldap_client.replace_attribute user_dn, :objectClass, updated_objectclass
-    end
-
 
     def get_user_devices(uid)
       result_attributes = ['macAddress']
@@ -73,27 +70,36 @@ module MacMe
       begin
         result.first.macaddress
       rescue
-        nil
+        Array.new
       end
     end
 
-    def get_uid_from_irc_nickname(nickname)
-      result_attributes = ['displayName']
-      irc_nickname_filter = Net::LDAP::Filter.eq('displayName', nickname)
-      @ldap_client.search(:filter => irc_nickname_filter,
-                        :attributes => result_attributes) do |result|
-        return result.uid.first
-      end
+    def uid_has_device_schema?(uid)
+      get_uid_objectclass(uid).include? 'ieee802Device'
     end
 
-    def add_device_to_user(uid, device)
-      add_device_schema uid unless uid_has_device_schema?
+    def add_device_schema(uid)
+      updated_objectclass = get_uid_objectclass(uid) + ['ieee802Device']
+      dn = user_dn uid
 
-      "Successfully added device #{device}"
+      ldap_client.replace_attribute dn, :objectClass, updated_objectclass
     end
 
-    def remove_device_from_user(uid, device)
-      "Successfully removed device #{device}"
+    def add_device_to_user(nickname, device)
+      uid = get_uid_from_irc_nickname nickname
+      dn = user_dn uid
+      updated_devices = get_user_devices(uid) + [device]
+
+      add_device_schema uid unless uid_has_device_schema? uid
+      ldap_client.replace_attribute dn, :macAddress, updated_devices
+    end
+
+    def remove_device_from_user(nickname, device)
+      uid = get_uid_from_irc_nickname nickname
+      dn = user_dn uid
+      updated_devices = get_user_devices(uid) - [device]
+
+      ldap_client.replace_attribute dn, :macAddress, updated_devices
     end
 
     def filter_old_devices(devices)
@@ -118,6 +124,10 @@ module MacMe
 
     def extract_uid_from_message(message)
       message[/link\s+(\w+)/,1]
+    end
+
+    def extract_uid_from_dn(dn)
+      dn[/^uid=(.*),ou=/,1]
     end
 
     def is_macme_command?(message)
@@ -153,7 +163,7 @@ module MacMe
       username = extract_username_from_topic topic
       displayname_filter = Net::LDAP::Filter.eq('displayName', username)
 
-      result = @ldap_client.search(:filter => displayname_filter,
+      result = ldap_client.search(:filter => displayname_filter,
                                   :attributes => result_attributes)
 
       begin
@@ -166,15 +176,15 @@ module MacMe
 
     def cmd_register(topic, message)
       if user_is_not_linked?(topic, message)
-        mqtt_respond(topic, "#{username}: Your user has not been registered")
+        mqtt_respond(topic, "#{username}: Your user has not been linked")
         cmd_help
       else
         mac_address = extract_mac_address_from_message message
         username = extract_username_from_topic topic
 
         if mac_address
-          response = add_device_to_user(username, mac_address)
-          mqtt_respond(topic, "#{username}: #{response}")
+          add_device_to_user(username, mac_address)
+          mqtt_respond(topic, "#{username}: Registered MAC #{mac_address} to your account")
         else
           mqtt_respond(topic, "#{username}: That does not appear to be a valid MAC")
         end
@@ -183,15 +193,15 @@ module MacMe
 
     def cmd_remove(topic, message)
       if user_is_not_linked?(topic, message)
-        mqtt_respond(topic, "#{username}: Your user has not been registered")
-        cmd_help
+        mqtt_respond(topic, "#{username}: Your user has not been linked")
+        cmd_help(topic, message)
       else
         mac_address = extract_mac_address_from_message message
         username = extract_username_from_topic topic
 
         if mac_address
-          response = remove_device_from_user(username, mac_address)
-          mqtt_respond(topic, "#{username}: #{response}")
+          remove_device_from_user(username, mac_address)
+          mqtt_respond(topic, "#{username}: Removed MAC #{mac_address} from your account")
         else
           mqtt_respond(topic, "#{username}: That does not appear to be a valid MAC")
         end
@@ -201,22 +211,27 @@ module MacMe
     def cmd_link(topic, message)
       ldap_uid = extract_uid_from_message message
       username = extract_username_from_topic topic
-      user_dn = "uid=#{ldap_uid},ou=People,dc=websages,dc=com"
 
-      ldap_client.replace_attribute user_dn, :displayName, username
-      mqtt_respond(topic, "#{username}: Added nick #{username} to #{user_dn}")
+      if ldap_uid
+        dn = user_dn ldap_uid
+        # ldap_client.replace_attribute dn, :displayName, username
+        mqtt_respond(topic, "#{username}: Added nick #{username} to #{dn}")
+      else
+        mqtt_respond(topic, "#{username}: Missing an IRC username to link")
+        cmd_help(topic, message)
+      end
     end
 
     def cmd_get_user_devices(topic, message)
       if user_is_not_linked?(topic, message)
-        mqtt_respond(topic, "#{username}: Your user has not been registered")
-        cmd_help
+        mqtt_respond(topic, "#{username}: Your user has not been linked")
+        cmd_help(topic, message)
       else
-        username = extract_username_from_topic
+        username = extract_username_from_topic topic
         uid = get_uid_from_irc_nickname username
         devices = get_user_devices uid
 
-        if devices
+        if devices.size > 0
           mqtt_respond(topic, "#{username}: Devices registered - #{devices.join(',')}")
         else
           mqtt_respond(topic, "#{username}: No devices currently registered")
