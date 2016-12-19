@@ -2,6 +2,7 @@
 require 'rubygems'
 require 'tempfile'
 require 'mqtt'
+require 'base64'
 require_relative 'logger.rb'
 
 module MacMe
@@ -33,7 +34,7 @@ module MacMe
     def extract_cert_from_env(cert, env_variable)
       cert_file = Tempfile.new(
         Digest::SHA256.hexdigest(env_variable))
-      cert_file.write(env_variable)
+      cert_file.write(Base64.decode64(env_variable))
       cert_file.close
 
       cert_file.path
