@@ -13,8 +13,8 @@ module MacMe
 
       if ENV['LDAP_BIND_DN'] and ENV['LDAP_BIND_PASSWORD']
         auth = {}
-        auth[:username] = bind_dn
-        auth[:password] = password
+        auth[:username] = ENV['LDAP_BIND_DN']
+        auth[:password] = ENV['LDAP_BIND_PASSWORD']
         auth[:method] = :simple
         ldap_args[:auth] = auth
       end

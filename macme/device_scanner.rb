@@ -11,9 +11,7 @@ module MacMe
     include MacMe::Device
 
     def initialize
-      @devices ||= []
-
-      @scan_subnet = ENV['MACME_SUBNET']          || '10.255.0.0/24'
+      @scan_subnet = ENV['MACME_SUBNET'] || '10.255.0.0/24'
 
       MacMe::Logger.log.debug "Beginning ARP poll of #{@scan_subnet}"
       self.poll
