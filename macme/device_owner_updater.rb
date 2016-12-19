@@ -17,18 +17,23 @@ module MacMe
     end
 
     def lookup_and_add_owner_to_device(device)
-      result_attributes = ['uid', 'gecos']
-      mac_address_filter = Net::LDAP::Filter.eq('macAddress', device[:mac])
+      result_attributes = ['uid', 'gecos', 'displayName']
+      mac_address_filter = Net::LDAP::Filter.eq('macAddress', device["mac"])
+
 
       result = ldap_client.search(:filter => mac_address_filter,
                                   :attributes => result_attributes)
 
-      device_owner = {
-        "uid" => result.uid.first,
-        "gecos" => result.gecos.first
-      }
+      unless result.first.nil?
+        device_owner = {
+          "uid" => result.first.uid.first,
+          "gecos" => result.first.gecos.first,
+          "nickname" => result.first.displayname.first
+        }
 
-      publish_device_to_mqtt(device.merge(device_owner))
+        MacMe::Logger.log.debug "Registering #{device} to #{device_owner['uid']}"
+        publish_device_to_mqtt(device.merge(device_owner))
+      end
     end
 
     def publish_device_to_mqtt(device)
@@ -44,6 +49,7 @@ module MacMe
       mqtt_client.get(devices_mqtt_topic) do |topic, device_json|
         device = JSON.parse device_json
 
+        MacMe::Logger.log.debug "Processing #{topic} with #{device_json}"
         lookup_and_add_owner_to_device device unless device_has_owner? device
       end
     end

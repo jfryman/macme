@@ -10,6 +10,14 @@ module MacMe
       @zone_name ||= ENV['MACME_ZONE_NAME'] || 'hq'
     end
 
+    def device_presence_mqtt_topic(device)
+      [
+        mqtt_topic,
+        zone_name,
+        'presence'
+      ].join('/')
+    end
+
     def device_mqtt_topic(device)
       [
         mqtt_topic,

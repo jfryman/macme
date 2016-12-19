@@ -107,7 +107,7 @@ module MacMe
     end
 
     def extract_users(devices)
-      devices.collect { |device| device["uid"] }
+      devices.collect { |device| device["uid"] }.uniq
     end
 
     def extract_mac_address_from_message(message)
@@ -223,11 +223,12 @@ module MacMe
     end
 
     def cmd_get_user_devices(topic, message)
+      username = extract_username_from_topic topic
+
       if user_is_not_linked?(topic, message)
         mqtt_respond(topic, "#{username}: Your user has not been linked")
         cmd_help(topic, message)
       else
-        username = extract_username_from_topic topic
         uid = get_uid_from_irc_nickname username
         devices = get_user_devices uid
 
@@ -240,7 +241,17 @@ module MacMe
     end
 
     def cmd_get_office_peeps(topic, message)
-      mqtt_respond(topic, "cmd_get_office_peeps")
+      username = extract_username_from_topic topic
+
+      mqtt_client.subscribe(device_presence_mqtt_topic)
+      users_in_office = mqtt_client.get
+      mqtt_client.unsubscribe(device_presence_mqtt_topic)
+
+      unless users_in_office.empty?
+        mqtt_respond(topic, "#{username}: #{random_presence_response} - #{users_in_office.join(',')}")
+      else
+        mqtt_respond(topic, "#{username}: #{random_no_presence_response}")
+      end
     end
 
     def cmd_help(topic, message)
