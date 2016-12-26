@@ -142,10 +142,6 @@ module MacMe
       end
     end
 
-    def is_command_callback?(message)
-      false
-    end
-
     ## MacMe::MQTT Public Implementation
     def module_name(message)
       @module_name ||= "MacMe::ChatApi"
