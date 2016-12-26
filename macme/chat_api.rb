@@ -1,17 +1,20 @@
-#!/usr/bin/env ruby
-
 require_relative 'lib/macme.rb'
 require_relative 'lib/mqtt.rb'
 require_relative 'lib/ldap.rb'
 require_relative 'lib/device.rb'
+require_relative 'lib/env.rb'
+
 
 module MacMe
-  class MQTTChatApi
+  class ChatApi
     include MacMe::MQTT
     include MacMe::LDAP
     include MacMe::Device
+    include MacMe::Env
 
     def initialize
+      mqtt_client.subscribe(mqtt_chat_poll_topic)
+
       self.poll
     end
 
@@ -30,23 +33,22 @@ module MacMe
       ].sample
     end
 
-    def mqtt_chat_poll_topic
-      @mqtt_chat_poll_topic ||= ENV['MQTT_CHAT_TOPIC'] || 'irc/#'
+    def random_lookup_response
+      [
+        "Standby, looking to see who's in the office",
+        "One moment while I take a look",
+        "Hold your horses. I'll get to it."
+      ].sample
     end
 
-    def device_stale_time
-      @device_stale_time ||= if ENV['MQTT_DEVICE_STALE_TIMEOUT']
-                               ENV['MQTT_DEVICE_STALE_TIMEOUT'].to_i
-                             else
-                               300
-                             end
+    def uid_filter
+      Net::LDAP::Filter.eq('uid', uid)
     end
 
     def get_uid_objectclass(uid)
       result_attributes = ['objectClass']
-      uid_filter = Net::LDAP::Filter.eq('uid', uid)
 
-      result = ldap_client.search(:filter => uid_filter,
+      result = ldap_client.search(:filter     => uid_filter,
                                   :attributes => result_attributes)
 
       result.first.objectclass
@@ -55,7 +57,8 @@ module MacMe
     def get_uid_from_irc_nickname(nickname)
       result_attributes = ['dn']
       irc_nickname_filter = Net::LDAP::Filter.eq('displayName', nickname)
-      result = ldap_client.search(:filter => irc_nickname_filter,
+
+      result = ldap_client.search(:filter     => irc_nickname_filter,
                                   :attributes => result_attributes)
 
       extract_uid_from_dn result.first.dn
@@ -63,8 +66,8 @@ module MacMe
 
     def get_user_devices(uid)
       result_attributes = ['macAddress']
-      uid_filter = Net::LDAP::Filter.eq('uid', uid)
-      result = ldap_client.search(:filter => uid_filter,
+
+      result = ldap_client.search(:filter     => uid_filter,
                                   :attributes => result_attributes)
 
       begin
@@ -102,14 +105,84 @@ module MacMe
       ldap_client.replace_attribute dn, :macAddress, updated_devices
     end
 
-    def filter_old_devices(devices)
-      devices.filter { |device| device["last_seen_epoch"] >= Time.now.to_i + device_stale_time }
+    def user_is_not_registered?(topic, message)
+      result_attributes = ['displayName']
+      username = extract_username_from_topic topic
+      displayname_filter = Net::LDAP::Filter.eq('displayName', username)
+
+      result = ldap_client.search(:filter => displayname_filter,
+                                  :attributes => result_attributes)
+
+      begin
+        result.first.displayname
+
+        false
+      rescue
+        true
+      end
     end
 
-    def extract_users(devices)
-      devices.collect { |device| device["uid"] }.uniq
+    def user_respond(topic, message)
+      topic = [
+        "hubot",
+        "respond",
+        "room",
+        extract_room_from_topic(topic)
+      ].join('/')
+
+      send_message(topic, message, false)
     end
 
+    def is_macme_command?(message)
+      case message
+      when /[\W]device\s+(.*)/ then true
+      when /[\W]macme\s+(.*)/ then true
+      when /[\W]#{zone_name}/ then true
+      else false
+      end
+    end
+
+    def is_command_callback?(message)
+      false
+    end
+
+    ## MacMe::MQTT Public Implementation
+    def module_name(message)
+      @module_name ||= "MacMe::ChatApi"
+    end
+
+    def poll
+      mqtt_client.get do |topic, message|
+        process_command(topic, message) if is_macme_command? message
+        process_callback(topic, message) if is_callback? message
+      end
+    end
+
+    def process_callback(topic, message)
+      case message
+      when /get_state/
+        callback_get_state(topic, message)
+      end
+    end
+
+    def process_command(topic, message)
+      case message
+      when /register/
+        cmd_register(topic, message)
+      when /remove/
+        cmd_remove(topic, message)
+      when /link/
+        cmd_link(topic, message)
+      when /(list|view)/
+        cmd_get_user_devices(topic, message)
+      when /me$/
+        cmd_get_office_peeps(topic, message)
+      else
+        cmd_help(topic, message)
+      end
+    end
+
+    ## Extracts
     def extract_mac_address_from_message(message)
       message[/(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))/,1]
     end
@@ -130,53 +203,14 @@ module MacMe
       dn[/^uid=(.*),ou=/,1]
     end
 
-    def is_macme_command?(message)
-      case message
-      when /[\W]device\s+(.*)/ then true
-      when /[\W]macme\s+(.*)/ then true
-      when /[\W]#{zone_name}/ then true
-      else false
-      end
+    def extract_users_from_state(state)
+      state.map { |device| device[:nickname] }.uniq
     end
 
-    def process_command(topic, message)
-      MacMe::Logger.log.debug "Processing message: [#{topic}] #{message}"
-
-      case message
-      when /register/
-        cmd_register(topic, message)
-      when /remove/
-        cmd_remove(topic, message)
-      when /link/
-        cmd_link(topic, message)
-      when /(list|view)/
-        cmd_get_user_devices(topic, message)
-      when /me$/
-        cmd_get_office_peeps(topic, message)
-      else
-        cmd_help(topic, message)
-      end
-    end
-
-    def user_is_not_linked?(topic, message)
-      result_attributes = ['displayName']
-      username = extract_username_from_topic topic
-      displayname_filter = Net::LDAP::Filter.eq('displayName', username)
-
-      result = ldap_client.search(:filter => displayname_filter,
-                                  :attributes => result_attributes)
-
-      begin
-        result.first.displayname
-        false
-      rescue
-        true
-      end
-    end
-
+    ## Commands
     def cmd_register(topic, message)
-      if user_is_not_linked?(topic, message)
-        mqtt_respond(topic, "#{username}: Your user has not been linked")
+      if user_is_not_registered?(topic, message)
+        user_respond(topic, "#{username}: Your user has not been linked")
         cmd_help
       else
         mac_address = extract_mac_address_from_message message
@@ -184,16 +218,16 @@ module MacMe
 
         if mac_address
           add_device_to_user(username, mac_address)
-          mqtt_respond(topic, "#{username}: Registered MAC #{mac_address} to your account")
+          user_respond(topic, "#{username}: Registered MAC #{mac_address} to your account")
         else
-          mqtt_respond(topic, "#{username}: That does not appear to be a valid MAC")
+          user_respond(topic, "#{username}: That does not appear to be a valid MAC")
         end
       end
     end
 
     def cmd_remove(topic, message)
-      if user_is_not_linked?(topic, message)
-        mqtt_respond(topic, "#{username}: Your user has not been linked")
+      if user_is_not_registered?(topic, message)
+        user_respond(topic, "#{username}: Your user has not been linked")
         cmd_help(topic, message)
       else
         mac_address = extract_mac_address_from_message message
@@ -201,9 +235,9 @@ module MacMe
 
         if mac_address
           remove_device_from_user(username, mac_address)
-          mqtt_respond(topic, "#{username}: Removed MAC #{mac_address} from your account")
+          user_respond(topic, "#{username}: Removed MAC #{mac_address} from your account")
         else
-          mqtt_respond(topic, "#{username}: That does not appear to be a valid MAC")
+          user_respond(topic, "#{username}: That does not appear to be a valid MAC")
         end
       end
     end
@@ -214,10 +248,10 @@ module MacMe
 
       if ldap_uid
         dn = user_dn ldap_uid
-        # ldap_client.replace_attribute dn, :displayName, username
-        mqtt_respond(topic, "#{username}: Added nick #{username} to #{dn}")
+        ldap_client.replace_attribute dn, :displayName, username
+        user_respond(topic, "#{username}: Added nick #{username} to #{dn}")
       else
-        mqtt_respond(topic, "#{username}: Missing an IRC username to link")
+        user_respond(topic, "#{username}: Missing an IRC username to link")
         cmd_help(topic, message)
       end
     end
@@ -225,33 +259,36 @@ module MacMe
     def cmd_get_user_devices(topic, message)
       username = extract_username_from_topic topic
 
-      if user_is_not_linked?(topic, message)
-        mqtt_respond(topic, "#{username}: Your user has not been linked")
+      if user_is_not_registered?(topic, message)
+        user_respond(topic, "#{username}: Your user has not been linked")
         cmd_help(topic, message)
       else
         uid = get_uid_from_irc_nickname username
         devices = get_user_devices uid
 
-        if devices.size > 0
-          mqtt_respond(topic, "#{username}: Devices registered - #{devices.join(',')}")
-        else
-          mqtt_respond(topic, "#{username}: No devices currently registered")
-        end
+        response = devices.size.empty? ?
+                     "#{username}: No devices currently registered" :
+                     "#{username}: Devices registered - #{devices.join(',')}"
+
+        user_respond(topic, response)
       end
     end
 
     def cmd_get_office_peeps(topic, message)
       username = extract_username_from_topic topic
 
-      mqtt_client.subscribe(device_presence_mqtt_topic)
-      users_in_office = mqtt_client.get
-      mqtt_client.unsubscribe(device_presence_mqtt_topic)
+      payload = {
+        :command => "get_state",
+        :options => {
+          :username => username,
+        },
+        :recipient => "MacMe::PresenceManager",
+      }
 
-      unless users_in_office.empty?
-        mqtt_respond(topic, "#{username}: #{random_presence_response} - #{users_in_office.join(',')}")
-      else
-        mqtt_respond(topic, "#{username}: #{random_no_presence_response}")
-      end
+      response = "#{username}: #{random_lookup_response}"
+
+      user_respond(topic, response)
+      send_message(command_topic, payload)
     end
 
     def cmd_help(topic, message)
@@ -262,28 +299,22 @@ module MacMe
       !macme remove <macAddress> - Remove device
       !macme list - View all your registered devices}
 
-      mqtt_respond(topic, response)
+      user_respond(topic, response)
     end
 
-    def mqtt_respond(topic, message)
-      command_topic = [
-        "hubot",
-        "respond",
-        "room",
-        extract_room_from_topic(topic)
-      ].join('/')
+    ## Callbacks
+    def callback_get_state(topic, message)
+      username = message[:options][:username]
+      users_in_office = extract_users_from_state(message[:response][:state])
 
-      mqtt_client.publish(command_topic, message)
+      response = users_in_office.empty? ?
+                   "#{username}: #{random_presence_response} - #{users_in_office.join(',')}" :
+                   "#{username}: #{random_no_presence_response}"
+
+      user_respond(topic, response)
     end
 
-    def poll
-      MacMe::Logger.log.debug "MQTT: Subscribing to #{mqtt_chat_poll_topic}"
+  end  # ChatApi
+end  # MacMe
 
-      mqtt_client.get(mqtt_chat_poll_topic) do |topic, message|
-        process_command(topic, message) if is_macme_command? message
-      end
-    end
-  end
-end
-
-MacMe::MQTTChatApi.new
+MacMe::ChatApi.new

@@ -1,9 +1,8 @@
-#!/usr/bin/env ruby
-
 require_relative 'lib/macme.rb'
 require_relative 'lib/ldap.rb'
 require_relative 'lib/mqtt.rb'
 require_relative 'lib/device.rb'
+
 
 module MacMe
   class DeviceOwnerUpdater
@@ -12,48 +11,52 @@ module MacMe
     include MacMe::Device
 
     def initialize
-      MacMe::Logger.log.debug "Beginning DeviceUpdater Worker"
+      MacMe::Logger.log.debug "Starting MacMe::DeviceOwnerUpdater"
+      mqtt_client.subscribe(devices_mqtt_topic)
+
       self.poll
     end
 
-    def lookup_and_add_owner_to_device(device)
-      result_attributes = ['uid', 'gecos', 'displayName']
-      mac_address_filter = Net::LDAP::Filter.eq('macAddress', device["mac"])
+    def lookup_device_owner(device)
+      result_attributes  = ['uid', 'gecos', 'displayName']
+      mac_address_filter = Net::LDAP::Filter.eq('macAddress', device[:mac])
 
-
-      result = ldap_client.search(:filter => mac_address_filter,
+      result = ldap_client.search(:filter     => mac_address_filter,
                                   :attributes => result_attributes)
 
-      unless result.first.nil?
-        device_owner = {
-          "uid" => result.first.uid.first,
-          "gecos" => result.first.gecos.first,
-          "nickname" => result.first.displayname.first
+      if result.first.nil?
+        MacMe::Logger.log.debug("No registered owner for #{device}")
+
+        device_lookup = {
+          :device_lookup => true
         }
+      else
+        device_lookup = {
+          :uid      => result.first.uid.first,
+          :gecos    => result.first.gecos.first,
+          :nickname => result.first.displayname.first,
+          :device_lookup => true
+        }
+      end
 
-        MacMe::Logger.log.debug "Registering #{device} to #{device_owner['uid']}"
-        publish_device_to_mqtt(device.merge(device_owner))
+      device.merge(device_lookup)
+    end
+
+    def unprocessed_message?(message)
+      ! message.key? :device_lookup
+    end
+
+    # MacMe::MQTT Implementation
+    def process_message(topic, message)
+      if ! device_has_owner? message and unprocessed_message? message
+        MacMe::Logger.log.debug("Looking up owner for #{message}")
+        device = lookup_device_owner message
+
+        send_message(topic, device)
       end
     end
 
-    def publish_device_to_mqtt(device)
-      device_topic = device_mqtt_topic device
-      mqtt_client.publish(device_topic, device.to_json, true)
-    end
-
-    def device_has_owner?(device={})
-      device["uid"] ? true : false
-    end
-
-    def poll
-      mqtt_client.get(devices_mqtt_topic) do |topic, device_json|
-        device = JSON.parse device_json
-
-        MacMe::Logger.log.debug "Processing #{topic} with #{device_json}"
-        lookup_and_add_owner_to_device device unless device_has_owner? device
-      end
-    end
-  end
-end
+  end  # DeviceOwnerUpdater
+end  # MacMe
 
 MacMe::DeviceOwnerUpdater.new

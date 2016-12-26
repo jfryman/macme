@@ -1,6 +1,5 @@
-#!/usr/bin/env ruby
-require 'rubygems'
 require 'net/ldap'
+
 
 module MacMe
   module LDAP
@@ -25,5 +24,6 @@ module MacMe
     def user_dn(uid)
       "uid=#{uid},ou=People,#{ENV['LDAP_BASE_DN']}"
     end
-  end
-end
+
+  end  # LDAP
+end  # MacMe

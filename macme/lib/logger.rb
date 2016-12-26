@@ -1,5 +1,6 @@
 require 'logger'
 
+
 module MacMe
   module Logger
     def self.log
@@ -10,5 +11,6 @@ module MacMe
       end
       @logger
     end
-  end
-end
+
+  end  # Logger
+end  # MacMe

@@ -1,14 +1,9 @@
-require 'rubygems'
+require_relative 'env.rb'
+
 
 module MacMe
   module Device
-    def mqtt_topic
-      @mqtt_topic ||= ENV['MACME_MQTT_TOPIC'] || 'macme'
-    end
-
-    def zone_name
-      @zone_name ||= ENV['MACME_ZONE_NAME'] || 'hq'
-    end
+    include MacMe::Env
 
     def device_presence_mqtt_topic(device)
       [
@@ -33,5 +28,10 @@ module MacMe
         '#'
       ].join('/')
     end
-  end
-end
+
+    def device_has_owner?(device={})
+      device.key?[:uid]
+    end
+
+  end  # Device
+end  # MacMe
