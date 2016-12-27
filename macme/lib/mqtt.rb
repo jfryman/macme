@@ -90,7 +90,11 @@ module MacMe
     end
 
     def intended_recipient?(topic, message)
-      message[:recipient] == module_name(message)
+      if message.key?(:recipient)
+        message[:recipient] == module_name(message)
+      else
+        false
+      end
     end
 
     def module_name(message)
@@ -108,18 +112,18 @@ module MacMe
     end
 
     def process_targeted_incoming_message(topic, message)
-      if is_callback? topic message
-        process_callback topic unpack_message(message)
-      elsif is_command? topic message
-        process_command topic unpack_message(message)
+      if is_callback?(topic, message)
+        process_callback(topic, unpack_message(message))
+      elsif is_command?(topic, message)
+        process_command(topic, unpack_message(message))
       end
     end
 
     def process_incoming_message(topic, message)
-      if intended_recipient? topic message
-        process_targeted_incoming_message topic message
+      if intended_recipient?(topic, message)
+        process_targeted_incoming_message(topic, message)
       else
-        process_message topic unpack_message(message)
+        process_message(topic, message)
       end
     end
 
@@ -130,7 +134,7 @@ module MacMe
 
       mqtt_client.get do |topic, message|
         if is_app_mqtt? message
-          process_incoming_message topic message
+          process_incoming_message(topic, unpack_message(message))
         end
       end
     end

@@ -13,6 +13,8 @@ module MacMe
     include MacMe::Env
 
     def initialize
+      MacMe::Logger.log.debug "Starting MacMe::ChatApi"
+
       mqtt_client.subscribe(mqtt_chat_poll_topic)
 
       self.poll
@@ -150,7 +152,7 @@ module MacMe
     def poll
       mqtt_client.get do |topic, message|
         process_command(topic, message) if is_macme_command? message
-        process_callback(topic, message) if is_callback? message
+        process_callback(topic, message) if is_callback?(topic, message)
       end
     end
 

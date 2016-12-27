@@ -31,8 +31,8 @@ module MacMe
     end
 
     def publish_device(device)
-      MacMe::Logger.log.debug "[publish_device] #{topic} / #{device}"
       topic = device_mqtt_topic device
+      MacMe::Logger.log.debug "[publish_device] #{topic} / #{device}"
 
       send_message(topic, device)
     end
@@ -44,9 +44,10 @@ module MacMe
 
           publish_device device
 
-          MacMe::Logger.log.debug "Pausing runloop for #{scan_delay} seconds"
-          sleep scan_delay
         end
+
+        MacMe::Logger.log.debug "Pausing runloop for #{scan_delay} seconds"
+        sleep scan_delay
       end
     end
 

@@ -17,7 +17,7 @@ module MacMe
       [
         mqtt_topic,
         zone_name,
-        device["mac"]
+        device[:mac]
       ].join('/')
     end
 
@@ -30,7 +30,7 @@ module MacMe
     end
 
     def device_has_owner?(device={})
-      device.key?[:uid]
+      device.key?(:uid)
     end
 
   end  # Device

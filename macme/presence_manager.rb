@@ -24,19 +24,19 @@ module MacMe
     end
 
     def purge_device(device)
-      devices = @state.filter do |known_device|
-        device[:mac] != known_device[:mac]
-      end
+      purged_state = @state.each_with_object([]) { |known_device, l|
+        l.push(known_device) if device[:mac] != known_device[:mac]
+      }
 
-      @state = devices
+      @state = purged_state
     end
 
     def purge_aged_devices
-      devices = @state.filter do |device|
-        device[:last_seen_epoch] >= Time.now.to_i + device_stale_time
-      end
+      purged_state = @state.each_with_object([]) { |device, l|
+        l.push(device) if device[:last_seen_epoch] >= Time.now.to_i + device_stale_time
+      }
 
-      @state = devices
+      @state = purged_state
     end
 
     ## Commands
