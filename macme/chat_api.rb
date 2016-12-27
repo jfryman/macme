@@ -310,7 +310,7 @@ module MacMe
     ## Callbacks
     def callback_get_state(topic, message)
       username = message[:options][:username]
-      reply_topic = extract_room_from_topic message[:options][:topic]
+      reply_topic = message[:options][:topic]
 
       users_in_office = extract_users_from_state(message[:response][:state])
 
