@@ -16,7 +16,6 @@ module MacMe
       MacMe::Logger.log.debug "Starting MacMe::ChatApi"
 
       mqtt_client.subscribe(callback_topic)
-      mqtt_client.subscribe(callback_topic)
       mqtt_client.subscribe(mqtt_chat_poll_topic)
 
       self.poll
@@ -45,14 +44,14 @@ module MacMe
       ].sample
     end
 
-    def uid_filter
+    def uid_filter(uid)
       Net::LDAP::Filter.eq('uid', uid)
     end
 
     def get_uid_objectclass(uid)
       result_attributes = ['objectClass']
 
-      result = ldap_client.search(:filter     => uid_filter,
+      result = ldap_client.search(:filter     => uid_filter(uid),
                                   :attributes => result_attributes)
 
       result.first.objectclass
@@ -71,7 +70,7 @@ module MacMe
     def get_user_devices(uid)
       result_attributes = ['macAddress']
 
-      result = ldap_client.search(:filter     => uid_filter,
+      result = ldap_client.search(:filter     => uid_filter(uid),
                                   :attributes => result_attributes)
 
       begin
@@ -134,8 +133,6 @@ module MacMe
         extract_room_from_topic(topic)
       ].join('/')
 
-      binding.pry
-
       send_message(topic, message, false)
     end
 
@@ -155,11 +152,13 @@ module MacMe
 
     def poll
       mqtt_client.get do |topic, message|
+        MacMe::Logger.log.debug("[MacMe::ChatApi]: Processing message #{topic} #{message}")
+
         if is_app_mqtt? message
           unpacked_message = unpack_message message
-
           process_callback(topic, unpacked_message) if is_callback?(topic, unpacked_message)
-          process_command(topic, unpacked_message) if is_macme_command? message
+        else
+          process_command(topic, message) if is_macme_command? message
         end
       end
     end
@@ -272,7 +271,7 @@ module MacMe
         uid = get_uid_from_irc_nickname username
         devices = get_user_devices uid
 
-        response = devices.size.empty? ?
+        response = devices.empty? ?
                      "#{username}: No devices currently registered" :
                      "#{username}: Devices registered - #{devices.join(',')}"
 
@@ -289,7 +288,6 @@ module MacMe
           :username => username,
           :topic => topic,
         },
-        :recipient => "MacMe::PresenceManager",
       }
 
       response = "#{username}: #{random_lookup_response}"
