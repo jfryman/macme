@@ -214,6 +214,8 @@ module MacMe
 
     ## Commands
     def cmd_register(topic, message)
+      username = extract_username_from_topic topic
+
       if user_is_not_registered?(topic, message)
         user_respond(topic, "#{username}: Your user has not been linked")
         cmd_help
@@ -231,6 +233,8 @@ module MacMe
     end
 
     def cmd_remove(topic, message)
+      username = extract_username_from_topic topic
+
       if user_is_not_registered?(topic, message)
         user_respond(topic, "#{username}: Your user has not been linked")
         cmd_help(topic, message)
