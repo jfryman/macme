@@ -277,7 +277,7 @@ module MacMe
 
         response = devices.empty? ?
                      "#{username}: No devices currently registered" :
-                     "#{username}: Devices registered - #{devices.join(',')}"
+                     "#{username}: Your registered devices - #{devices.join(', ')}"
 
         user_respond(topic, response)
       end
