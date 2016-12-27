@@ -25,7 +25,7 @@ module MacMe
 
     def purge_device(device)
       purged_state = @state.each_with_object([]) { |known_device, l|
-        l.push(known_device) if device[:mac] != known_device[:mac]
+        l.push(known_device) if device[:mac].downcase != known_device[:mac].downcase
       }
 
       @state = purged_state
