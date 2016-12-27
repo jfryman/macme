@@ -32,7 +32,7 @@ module MacMe
 
     def publish_device(device)
       topic = device_mqtt_topic device
-      MacMe::Logger.log.debug "[publish_device] #{topic} / #{device}"
+      MacMe::Logger.log.debug "[MacMe::DeviceScanner] #{topic} / #{device}"
 
       send_message(topic, device)
     end

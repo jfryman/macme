@@ -41,24 +41,25 @@ module MacMe
 
     ## Commands
     def cmd_get_state(topic, message)
-      if message.key?[:callback_module]
-        payload = {
-          :command   => message[:command],
-          :options   => message[:options],
-          :response  => {:state => @state},
-          :recipient => message[:callback_module],
-        }
+      MacMe::Logger.trace(module_name, "Attempting to retrieve state", topic, message)
 
-        send_message(callback_topic, payload)
-      end
+      payload = {
+        :command   => message[:command],
+        :options   => message[:options],
+        :response  => {:state => @state},
+      }
+
+      send_message(callback_topic, payload)
     end
 
     ## MacMe::MQTT Implementation
-    def module_name(message)
+    def module_name
       @module_name ||= "MacMe::PresenceManager"
     end
 
     def process_command(topic, message)
+      MacMe::Logger.trace(module_name, "Processing Command", topic, message)
+
       case message[:command]
       when /get_state/
         cmd_get_state(topic, message)
@@ -67,7 +68,7 @@ module MacMe
 
     def process_message(topic, message)
       if device_has_owner? message
-        MacMe::Logger.log.debug("Tracking device #{message} in presence state")
+        MacMe::Logger.trace(module_name, "Tracking in state", topic, message)
 
         purge_aged_devices
         track_device message

@@ -15,6 +15,8 @@ module MacMe
     def initialize
       MacMe::Logger.log.debug "Starting MacMe::ChatApi"
 
+      mqtt_client.subscribe(callback_topic)
+      mqtt_client.subscribe(callback_topic)
       mqtt_client.subscribe(mqtt_chat_poll_topic)
 
       self.poll
@@ -37,7 +39,7 @@ module MacMe
 
     def random_lookup_response
       [
-        "Standby, looking to see who's in the office",
+        "Standby, looking to see who's at #{zone_name}",
         "One moment while I take a look",
         "Hold your horses. I'll get to it."
       ].sample
@@ -132,6 +134,8 @@ module MacMe
         extract_room_from_topic(topic)
       ].join('/')
 
+      binding.pry
+
       send_message(topic, message, false)
     end
 
@@ -145,19 +149,23 @@ module MacMe
     end
 
     ## MacMe::MQTT Public Implementation
-    def module_name(message)
+    def module_name
       @module_name ||= "MacMe::ChatApi"
     end
 
     def poll
       mqtt_client.get do |topic, message|
-        process_command(topic, message) if is_macme_command? message
-        process_callback(topic, message) if is_callback?(topic, message)
+        if is_app_mqtt? message
+          unpacked_message = unpack_message message
+
+          process_callback(topic, unpacked_message) if is_callback?(topic, unpacked_message)
+          process_command(topic, unpacked_message) if is_macme_command? message
+        end
       end
     end
 
     def process_callback(topic, message)
-      case message
+      case message[:command]
       when /get_state/
         callback_get_state(topic, message)
       end
@@ -279,6 +287,7 @@ module MacMe
         :command => "get_state",
         :options => {
           :username => username,
+          :topic => topic,
         },
         :recipient => "MacMe::PresenceManager",
       }
@@ -303,13 +312,16 @@ module MacMe
     ## Callbacks
     def callback_get_state(topic, message)
       username = message[:options][:username]
+      reply_topic = extract_room_from_topic message[:options][:topic]
+
       users_in_office = extract_users_from_state(message[:response][:state])
 
-      response = users_in_office.empty? ?
-                   "#{username}: #{random_presence_response} - #{users_in_office.join(',')}" :
-                   "#{username}: #{random_no_presence_response}"
 
-      user_respond(topic, response)
+      response = users_in_office.empty? ?
+                   "#{username}: #{random_no_presence_response}" :
+                   "#{username}: #{random_presence_response} - #{users_in_office.join(',')}"
+
+      user_respond(reply_topic, response)
     end
 
   end  # ChatApi

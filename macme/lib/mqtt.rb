@@ -43,7 +43,7 @@ module MacMe
       cert_file.path
     end
 
-    def app_command_topic
+    def command_topic
       [
         mqtt_topic,
         zone_name,
@@ -60,7 +60,7 @@ module MacMe
     end
 
     def is_command?(topic="", message)
-      if topic == app_command_topic and message.key?(:command)
+      if topic == command_topic and message.key?(:command)
         true
       else
         false
@@ -79,8 +79,7 @@ module MacMe
 
     def is_callback?(topic, message)
       if topic == callback_topic and
-        message.key(:command) and
-        message.key?(:recipient) and
+        message.key?(:command) and
         message.key?(:response)
 
         true
@@ -91,14 +90,14 @@ module MacMe
 
     def intended_recipient?(topic, message)
       if message.key?(:recipient)
-        message[:recipient] == module_name(message)
+        message[:recipient] == module_name
       else
         false
       end
     end
 
-    def module_name(message)
-      message[:recipient]
+    def module_name
+      @module_name ||= "MacMe::MQTT"
     end
 
     def unpack_message(message)
@@ -107,32 +106,43 @@ module MacMe
 
     def send_message(topic, message, to_json = true)
       payload = to_json ? message.to_json : message
+      MacMe::Logger.log.debug "[MacMe::MQTT] Sending to #{topic}: #{payload}"
 
       mqtt_client.publish(topic, payload)
     end
 
-    def process_targeted_incoming_message(topic, message)
-      if is_callback?(topic, message)
-        process_callback(topic, unpack_message(message))
-      elsif is_command?(topic, message)
-        process_command(topic, unpack_message(message))
-      end
-    end
-
     def process_incoming_message(topic, message)
-      if intended_recipient?(topic, message)
-        process_targeted_incoming_message(topic, message)
+      if is_callback?(topic, message)
+        MacMe::Logger.trace('MacMe::MQTT',
+                            "Message is a callback",
+                            topic, message)
+
+        process_callback(topic, message)
+      elsif is_command?(topic, message)
+        MacMe::Logger.trace('MacMe::MQTT',
+                            "Message is a command",
+                            topic, message)
+
+        process_command(topic, message)
       else
+        MacMe::Logger.trace('MacMe::MQTT',
+                            "Processing message",
+                            topic, message)
+
         process_message(topic, message)
       end
     end
 
     # MacMe::MQTT Public Implementation
     def poll
-      mqtt_client.subscribe(app_command_topic)
+      mqtt_client.subscribe(command_topic)
       mqtt_client.subscribe(callback_topic)
 
       mqtt_client.get do |topic, message|
+        MacMe::Logger.trace('MacMe::MQTT',
+                            "Incoming message",
+                            topic, message)
+
         if is_app_mqtt? message
           process_incoming_message(topic, unpack_message(message))
         end

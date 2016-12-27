@@ -12,5 +12,15 @@ module MacMe
       @logger
     end
 
+    def self.trace(module_name, log, topic=nil, message=nil)
+      if topic and message
+        log_line = "[#{module_name}] #{log} (#{topic} / #{message})"
+      else
+        log_line = "[#{module_name}] #{log}"
+      end
+
+      self.log.debug log_line
+    end
+
   end  # Logger
 end  # MacMe
