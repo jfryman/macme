@@ -31,10 +31,18 @@ module MacMe
           :device_lookup => true
         }
       else
+        MacMe::Logger.log.debug("Found owner #{result} for #{device}")
+
+        nickname = if result.first.respond_to? :displayname
+                     result.first.displayname.first
+                   else
+                     result.first.uid.first
+                   end
+
         device_lookup = {
           :uid      => result.first.uid.first,
           :gecos    => result.first.gecos.first,
-          :nickname => result.first.displayname.first,
+          :nickname => nickname,
           :device_lookup => true
         }
       end
