@@ -138,9 +138,9 @@ module MacMe
 
     def is_macme_command?(message)
       case message
-      when /[\W]device\s+(.*)/ then true
-      when /[\W]macme\s+(.*)/ then true
-      when /[\W]#{zone_name}/ then true
+      when /^[\W]device\s+(.*)/ then true
+      when /^[\W]macme\s+(.*)/ then true
+      when /^[\W]#{zone_name}/ then true
       else false
       end
     end
